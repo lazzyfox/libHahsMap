@@ -439,7 +439,7 @@ namespace LibHashMap {
       }
       
       private :
-        Size pivot_number {dim_size};
+        Size pivot_number {dim_size - 1};
         std::array<Tools::Node<Key, Value, Size, dim_size>, dim_size> data_stor{};
   };
 }

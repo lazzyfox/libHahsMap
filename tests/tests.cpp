@@ -9,6 +9,179 @@
 using namespace LibHashMap;
 using namespace LibHashMap::Tools;
 
+template<typename KeyType, std::unsigned_integral HashType = size_t> class TestHashFunction {
+   private :
+    std::hash<KeyType> std_hash_counter{};
+   public :
+    [[nodiscard]] constexpr auto countHash(auto&& val) noexcept {
+      const std::string t1{"test1"}, t2 {"test2"}, t3 {"test3"}, t4 {"test4"}, t5 {"test5"};
+      if (!val.compare(t1)) return static_cast<HashType>(111);;
+      if (!val.compare(t2)) return static_cast<HashType>(111);;
+      if (!val.compare(t3)) return static_cast<HashType>(111);;
+      if (!val.compare(t4)) return static_cast<HashType>(222);;
+      if (!val.compare(t5)) return static_cast<HashType>(222);;
+       
+      auto hash {std_hash_counter(std::forward<decltype(val)>(val))};
+      if constexpr (std::is_same<HashType, size_t>::value) {
+        return hash;
+      } else {
+        return static_cast<HashType>(hash);
+      }
+    }
+};
+
+template<typename Key, typename Value, std::unsigned_integral Size = size_t, Size dim_size = 0>
+  class TestHashMap : TestHashFunction<Key, Size> {
+    public :
+      
+      constexpr explicit TestHashMap (std::initializer_list<std::pair<Key, Value>>&& lst) 
+        : TestHashFunction<Key, Size>() {
+        Size tmp_hash_sz{0}, stor_sz{0};
+        std::array<Size, dim_size> tmp_hash_tbl;
+        std::array<Key, dim_size> tmp_key_tbl;
+
+        //  Creating new hash for key if key value is not duplicated
+        auto countHash = [this, &tmp_hash_tbl, &tmp_hash_sz, &tmp_key_tbl, &stor_sz](auto val) {
+          auto hash {TestHashFunction<Key, Size>::countHash(std::forward<Key>(val.first))};
+
+          if (auto it_collision_node {std::ranges::find(tmp_hash_tbl, hash)}; it_collision_node == tmp_hash_tbl.end()) { //  Just add new data node (no value duplication or cash collision case)
+            tmp_hash_tbl[tmp_hash_sz] = hash;
+            tmp_key_tbl[tmp_hash_sz] = val.first;
+            Tools::Node<Key, Value, Size, dim_size> node{std::forward<Key>(val.first), std::forward<Value>(val.second), std::forward<Size>(hash)};
+            data_stor[stor_sz] = std::move(node);
+            ++tmp_hash_sz;
+            ++stor_sz;
+          } else {
+            if (std::ranges::find(tmp_key_tbl, val.first) == tmp_key_tbl.end()) {  //  Hash collision case
+              Tools::Node<Key, Value, Size, dim_size> node{std::forward<Key>(val.first), std::forward<Value>(val.second), std::forward<Size>(hash)};
+              data_stor[pivot_number] = std::move(node);
+              
+              auto collision_node {*(std::find_if(data_stor.begin(), data_stor.begin() + (pivot_number - 1), [&val](auto&& array_val) {
+                bool ret {false};
+                if constexpr (std::is_same<Value, std::string>::value || std::is_same<Value, std::string_view>::value) {
+                  if (!array_val.val.compare(val.second)) {
+                    ret = true;
+                  }
+                } else if constexpr (std::is_same<Value, const char*>::value) {
+                  std::string array_str{array_val.val};
+                  std::string val_str{val.second};
+                  if (!array_str.compare(val_str)) {
+                    ret = true;
+                  }
+                } else {  //  Integral type
+                  if (array_val.val == val.second) {
+                    ret = true;
+                  }
+              }
+              return ret;
+              }))};
+
+              (collision_node.collision_chain)[collision_node.collisions_number] = &data_stor[pivot_number];
+              ++(collision_node.collisions_number);
+              --pivot_number;
+            } else {  //  Duplicated value
+              static_assert(true, "Duplicated hash value");
+            }
+          }
+        };
+        assert((void("Number of variables in initialising list should be equal dimension type size"), lst.size() == dim_size));
+        static_assert(std::is_same<Size, decltype(dim_size)>::value, "Requested type should be equal dimension type size");
+        
+        std::ranges::for_each(lst, countHash);
+        std::ranges::sort(data_stor, [](auto& lhs, auto& rhs){return lhs.hash < rhs.hash;});
+      }
+
+      
+      constexpr auto get(auto&& key) noexcept {
+        const Value* val{nullptr};
+        Size pos{(Size)floor(pivot_number / 2)};
+        const Tools::Node<Key, Value, Size, dim_size>* array_val;
+        const auto key_hash {TestHashFunction<Key, Size>::countHash(std::forward<Key>(key))};
+
+        do {
+          array_val =&data_stor[pos];
+          auto res {array_val->hash <=> key_hash};
+
+          if (res == 0) {
+            if (!array_val->collisions_number) {
+              if (array_val->key == key) {  //  There are collisions but first value is in main collision node
+                val = &(array_val->val);
+              } else {
+                for (auto count : array_val->collision_chain) {  //  Looking value in collision chain
+                  if (key == count->key) {
+                    val = &count->val;
+                    break;
+                  }
+                }
+              }
+            } else {  //  There are no collisions at all
+              val = &array_val->val;  
+            }
+            break;
+          }
+          if (res > 0) {
+            if (pos == 0) {
+              break;
+            }
+            if (pos == 1) {
+              --pos;
+            } else {
+              pos -= pos/2; 
+            }
+          }
+          if (res < 0) {
+            if (pos == 1) {
+              ++pos;
+            } else {
+              pos += pos/2; 
+            }
+          }
+        } while (pos >= 0 && pos < pivot_number); 
+        
+        return val;
+      }
+      
+      constexpr bool exists(auto&& key) noexcept {
+        bool ret {false};
+        Size pos{(Size)floor(pivot_number / 2)};
+        const Tools::Node<Key, Value, Size, dim_size>* array_val;
+        const auto key_hash {TestHashFunction<Key, Size>::countHash(std::forward<Key>(key))};
+        
+        do {
+          array_val = &data_stor[pos];
+          auto res {array_val->hash <=> key_hash};
+
+          if (res == 0) {
+            ret = true;
+            break;
+          }
+          if (res > 0) {
+            if (pos == 0) {
+              break;
+            }
+            if (pos == 1) {
+              --pos;
+            } else {
+              pos -= pos/2; 
+            }
+          }
+          if (res < 0) {
+            if (pos == 1) {
+              ++pos;
+            } else {
+              pos += pos/2; 
+            }
+          }
+        } while (pos >= 0 && pos < pivot_number); 
+        return ret;
+      }
+      
+      private :
+        Size pivot_number {dim_size - 1};
+        std::array<Tools::Node<Key, Value, Size, dim_size>, dim_size> data_stor{};
+  };
+
+
 TEST(HashTest, SizeT) {
   HashFunction<int, uint8_t> hash{};
   auto a {hash(1)};
@@ -114,16 +287,31 @@ TEST(Ctr, Create_Sort_String_View_Uint8_t) {
 
 TEST(Collision, String) {
   using namespace std::literals;
-  HashMap<std::string, char, size_t, 3> hash{{"xqzrbn"s,'b'}, {"test",'c'}, {"krumld"s,'a'}};
+  TestHashMap<std::string, char, uint8_t, 8> hash{{"xqzrbn"s,'b'}, {"test",'c'}, {"krumld"s,'a'}, {"test1"s, 'd'}, {"test2"s, 'e'}, {"test3"s, 'f'}, {"test4"s, 'g'}, {"test5"s, 'h'}};
   ASSERT_TRUE(hash.get("krumld"s));
   ASSERT_TRUE(hash.get("xqzrbn"s));
-  ASSERT_TRUE(hash.get("test"));
+  ASSERT_TRUE(hash.get("test"s));
+  ASSERT_TRUE(hash.get("test1"s));
+  ASSERT_TRUE(hash.get("test2"s));
+  ASSERT_TRUE(hash.get("test3"s));
+  ASSERT_TRUE(hash.get("test4"s));
+  ASSERT_TRUE(hash.get("test5"s));
   auto a {*hash.get("krumld"s)};
   auto b {*hash.get("xqzrbn"s)};
-  auto c {*hash.get("test")};
+  auto c {*hash.get("test"s)};
+  auto d {*hash.get("test1"s)};
+  auto e {*hash.get("test2"s)};
+  auto f {*hash.get("test3"s)};
+  auto g {*hash.get("test4"s)};
+  auto h {*hash.get("test5"s)};
   EXPECT_EQ (a, 'a');
   EXPECT_EQ (b, 'b');
   EXPECT_EQ (c, 'c');
+  EXPECT_EQ (d, 'd');
+  EXPECT_EQ (e, 'e');
+  EXPECT_EQ (f, 'f');
+  EXPECT_EQ (g, 'g');
+  EXPECT_EQ (h, 'h');
 }
 
 
