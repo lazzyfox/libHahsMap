@@ -135,34 +135,6 @@ TEST(HashTest, SizeT) {
   EXPECT_EQ (c, 3);
 }
 
-TEST(Collision, String) {
-  using namespace std::literals;
-  TestHashMap<std::string, char, uint8_t, 8> hash{{"xqzrbn"s,'b'}, {"test",'c'}, {"krumld"s,'a'}, {"test1"s, 'd'}, {"test2"s, 'e'}, {"test3"s, 'f'}, {"test4"s, 'g'}, {"test5"s, 'h'}};
-  ASSERT_TRUE(hash.get("krumld"s));
-  ASSERT_TRUE(hash.get("xqzrbn"s));
-  ASSERT_TRUE(hash.get("test"s));
-  ASSERT_TRUE(hash.get("test1"s));
-  ASSERT_TRUE(hash.get("test2"s));
-  ASSERT_TRUE(hash.get("test3"s));
-  ASSERT_TRUE(hash.get("test4"s));
-  ASSERT_TRUE(hash.get("test5"s));
-  auto a {*hash.get("krumld"s)};
-  auto b {*hash.get("xqzrbn"s)};
-  auto c {*hash.get("test"s)};
-  auto d {*hash.get("test1"s)};
-  auto e {*hash.get("test2"s)};
-  auto f {*hash.get("test3"s)};
-  auto g {*hash.get("test4"s)};
-  auto h {*hash.get("test5"s)};
-  EXPECT_EQ (a, 'a');
-  EXPECT_EQ (b, 'b');
-  EXPECT_EQ (c, 'c');
-  EXPECT_EQ (d, 'd');
-  EXPECT_EQ (e, 'e');
-  EXPECT_EQ (f, 'f');
-  EXPECT_EQ (g, 'g');
-  EXPECT_EQ (h, 'h');
-}
 
 TEST(Ctr, Create_NoSort) {
   HashMap<int, char, uint8_t, 3> hash{{1,'a'}, {2,'b'}, {3,'c'}};
@@ -257,34 +229,34 @@ TEST(Ctr, Create_Sort_String_View_Uint8_t) {
 }
 
 
-// TEST(Collision, String) {
-//   using namespace std::literals;
-//   TestHashMap<std::string, char, uint8_t, 8> hash{{"xqzrbn"s,'b'}, {"test",'c'}, {"krumld"s,'a'}, {"test1"s, 'd'}, {"test2"s, 'e'}, {"test3"s, 'f'}, {"test4"s, 'g'}, {"test5"s, 'h'}};
-//   ASSERT_TRUE(hash.get("krumld"s));
-//   ASSERT_TRUE(hash.get("xqzrbn"s));
-//   ASSERT_TRUE(hash.get("test"s));
-//   ASSERT_TRUE(hash.get("test1"s));
-//   ASSERT_TRUE(hash.get("test2"s));
-//   ASSERT_TRUE(hash.get("test3"s));
-//   ASSERT_TRUE(hash.get("test4"s));
-//   ASSERT_TRUE(hash.get("test5"s));
-//   auto a {*hash.get("krumld"s)};
-//   auto b {*hash.get("xqzrbn"s)};
-//   auto c {*hash.get("test"s)};
-//   auto d {*hash.get("test1"s)};
-//   auto e {*hash.get("test2"s)};
-//   auto f {*hash.get("test3"s)};
-//   auto g {*hash.get("test4"s)};
-//   auto h {*hash.get("test5"s)};
-//   EXPECT_EQ (a, 'a');
-//   EXPECT_EQ (b, 'b');
-//   EXPECT_EQ (c, 'c');
-//   EXPECT_EQ (d, 'd');
-//   EXPECT_EQ (e, 'e');
-//   EXPECT_EQ (f, 'f');
-//   EXPECT_EQ (g, 'g');
-//   EXPECT_EQ (h, 'h');
-// }
+ TEST(Collision, String) {
+   using namespace std::literals;
+   TestHashMap<std::string, char, uint8_t, 8> hash{{"xqzrbn"s,'b'}, {"test",'c'}, {"krumld"s,'a'}, {"test1"s, 'd'}, {"test2"s, 'e'}, {"test3"s, 'f'}, {"test4"s, 'g'}, {"test5"s, 'h'}};
+   ASSERT_TRUE(hash.get("krumld"s));
+   ASSERT_TRUE(hash.get("xqzrbn"s));
+   ASSERT_TRUE(hash.get("test"s));
+   ASSERT_TRUE(hash.get("test1"s));
+   ASSERT_TRUE(hash.get("test2"s));
+   ASSERT_TRUE(hash.get("test3"s));
+   ASSERT_TRUE(hash.get("test4"s));
+   ASSERT_TRUE(hash.get("test5"s));
+   auto a {*hash.get("krumld"s)};
+   auto b {*hash.get("xqzrbn"s)};
+   auto c {*hash.get("test"s)};
+   auto d {*hash.get("test1"s)};
+   auto e {*hash.get("test2"s)};
+   auto f {*hash.get("test3"s)};
+   auto g {*hash.get("test4"s)};
+   auto h {*hash.get("test5"s)};
+   EXPECT_EQ (a, 'a');
+   EXPECT_EQ (b, 'b');
+   EXPECT_EQ (c, 'c');
+   EXPECT_EQ (d, 'd');
+   EXPECT_EQ (e, 'e');
+   EXPECT_EQ (f, 'f');
+   EXPECT_EQ (g, 'g');
+   EXPECT_EQ (h, 'h');
+ }
 
 
 TEST(EXISTS, Exists) {
