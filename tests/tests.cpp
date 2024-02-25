@@ -55,29 +55,8 @@ template<typename Key, typename Value, std::unsigned_integral Size = size_t, Siz
             if (std::ranges::find(tmp_key_tbl, val.first) == tmp_key_tbl.end()) {  //  Hash collision case
               Tools::Node<Key, Value, Size, dim_size> node{std::forward<Key>(val.first), std::forward<Value>(val.second), std::forward<Size>(hash)};
               data_stor[pivot_number] = std::move(node);
-              
-              auto collision_node {*(std::find_if(data_stor.begin(), data_stor.begin() + (pivot_number - 1), [&val](auto&& array_val) {
-                bool ret {false};
-                if constexpr (std::is_same<Value, std::string>::value || std::is_same<Value, std::string_view>::value) {
-                  if (!array_val.val.compare(val.second)) {
-                    ret = true;
-                  }
-                } else if constexpr (std::is_same<Value, const char*>::value) {
-                  std::string array_str{array_val.val};
-                  std::string val_str{val.second};
-                  if (!array_str.compare(val_str)) {
-                    ret = true;
-                  }
-                } else {  //  Integral type
-                  if (array_val.val == val.second) {
-                    ret = true;
-                  }
-              }
-              return ret;
-              }))};
-
-              (collision_node.collision_chain)[collision_node.collisions_number] = &data_stor[pivot_number];
-              ++(collision_node.collisions_number);
+              auto collision_node {std::ranges::find_if(data_stor.begin(), data_stor.begin() + (dim_size - (dim_size - pivot_number)), [&hash] (const auto& stor_node){return stor_node.hash == hash;})};
+              collision_node->collision_chain[collision_node->collisions_number++] = &data_stor[pivot_number];
               --pivot_number;
             } else {  //  Duplicated value
               static_assert(true, "Duplicated hash value");
@@ -88,10 +67,9 @@ template<typename Key, typename Value, std::unsigned_integral Size = size_t, Siz
         static_assert(std::is_same<Size, decltype(dim_size)>::value, "Requested type should be equal dimension type size");
         
         std::ranges::for_each(lst, countHash);
-        std::ranges::sort(data_stor, [](auto& lhs, auto& rhs){return lhs.hash < rhs.hash;});
+        std::ranges::sort(data_stor.begin(), data_stor.begin() + (dim_size - (dim_size - pivot_number - 1)), [](auto& lhs, auto& rhs){return lhs.hash < rhs.hash;});
       }
 
-      
       constexpr auto get(auto&& key) noexcept {
         const Value* val{nullptr};
         Size pos{(Size)floor(pivot_number / 2)};
@@ -103,7 +81,7 @@ template<typename Key, typename Value, std::unsigned_integral Size = size_t, Siz
           auto res {array_val->hash <=> key_hash};
 
           if (res == 0) {
-            if (!array_val->collisions_number) {
+            if (array_val->collisions_number) {
               if (array_val->key == key) {  //  There are collisions but first value is in main collision node
                 val = &(array_val->val);
               } else {
@@ -136,44 +114,9 @@ template<typename Key, typename Value, std::unsigned_integral Size = size_t, Siz
               pos += pos/2; 
             }
           }
-        } while (pos >= 0 && pos < pivot_number); 
+        } while (pos >= 0 && pos <= pivot_number); 
         
         return val;
-      }
-      
-      constexpr bool exists(auto&& key) noexcept {
-        bool ret {false};
-        Size pos{(Size)floor(pivot_number / 2)};
-        const Tools::Node<Key, Value, Size, dim_size>* array_val;
-        const auto key_hash {TestHashFunction<Key, Size>::countHash(std::forward<Key>(key))};
-        
-        do {
-          array_val = &data_stor[pos];
-          auto res {array_val->hash <=> key_hash};
-
-          if (res == 0) {
-            ret = true;
-            break;
-          }
-          if (res > 0) {
-            if (pos == 0) {
-              break;
-            }
-            if (pos == 1) {
-              --pos;
-            } else {
-              pos -= pos/2; 
-            }
-          }
-          if (res < 0) {
-            if (pos == 1) {
-              ++pos;
-            } else {
-              pos += pos/2; 
-            }
-          }
-        } while (pos >= 0 && pos < pivot_number); 
-        return ret;
       }
       
       private :
@@ -190,6 +133,35 @@ TEST(HashTest, SizeT) {
   EXPECT_EQ (a, 1);
   EXPECT_EQ (b, 2);
   EXPECT_EQ (c, 3);
+}
+
+TEST(Collision, String) {
+  using namespace std::literals;
+  TestHashMap<std::string, char, uint8_t, 8> hash{{"xqzrbn"s,'b'}, {"test",'c'}, {"krumld"s,'a'}, {"test1"s, 'd'}, {"test2"s, 'e'}, {"test3"s, 'f'}, {"test4"s, 'g'}, {"test5"s, 'h'}};
+  ASSERT_TRUE(hash.get("krumld"s));
+  ASSERT_TRUE(hash.get("xqzrbn"s));
+  ASSERT_TRUE(hash.get("test"s));
+  ASSERT_TRUE(hash.get("test1"s));
+  ASSERT_TRUE(hash.get("test2"s));
+  ASSERT_TRUE(hash.get("test3"s));
+  ASSERT_TRUE(hash.get("test4"s));
+  ASSERT_TRUE(hash.get("test5"s));
+  auto a {*hash.get("krumld"s)};
+  auto b {*hash.get("xqzrbn"s)};
+  auto c {*hash.get("test"s)};
+  auto d {*hash.get("test1"s)};
+  auto e {*hash.get("test2"s)};
+  auto f {*hash.get("test3"s)};
+  auto g {*hash.get("test4"s)};
+  auto h {*hash.get("test5"s)};
+  EXPECT_EQ (a, 'a');
+  EXPECT_EQ (b, 'b');
+  EXPECT_EQ (c, 'c');
+  EXPECT_EQ (d, 'd');
+  EXPECT_EQ (e, 'e');
+  EXPECT_EQ (f, 'f');
+  EXPECT_EQ (g, 'g');
+  EXPECT_EQ (h, 'h');
 }
 
 TEST(Ctr, Create_NoSort) {
@@ -285,34 +257,34 @@ TEST(Ctr, Create_Sort_String_View_Uint8_t) {
 }
 
 
-TEST(Collision, String) {
-  using namespace std::literals;
-  TestHashMap<std::string, char, uint8_t, 8> hash{{"xqzrbn"s,'b'}, {"test",'c'}, {"krumld"s,'a'}, {"test1"s, 'd'}, {"test2"s, 'e'}, {"test3"s, 'f'}, {"test4"s, 'g'}, {"test5"s, 'h'}};
-  ASSERT_TRUE(hash.get("krumld"s));
-  ASSERT_TRUE(hash.get("xqzrbn"s));
-  ASSERT_TRUE(hash.get("test"s));
-  ASSERT_TRUE(hash.get("test1"s));
-  ASSERT_TRUE(hash.get("test2"s));
-  ASSERT_TRUE(hash.get("test3"s));
-  ASSERT_TRUE(hash.get("test4"s));
-  ASSERT_TRUE(hash.get("test5"s));
-  auto a {*hash.get("krumld"s)};
-  auto b {*hash.get("xqzrbn"s)};
-  auto c {*hash.get("test"s)};
-  auto d {*hash.get("test1"s)};
-  auto e {*hash.get("test2"s)};
-  auto f {*hash.get("test3"s)};
-  auto g {*hash.get("test4"s)};
-  auto h {*hash.get("test5"s)};
-  EXPECT_EQ (a, 'a');
-  EXPECT_EQ (b, 'b');
-  EXPECT_EQ (c, 'c');
-  EXPECT_EQ (d, 'd');
-  EXPECT_EQ (e, 'e');
-  EXPECT_EQ (f, 'f');
-  EXPECT_EQ (g, 'g');
-  EXPECT_EQ (h, 'h');
-}
+// TEST(Collision, String) {
+//   using namespace std::literals;
+//   TestHashMap<std::string, char, uint8_t, 8> hash{{"xqzrbn"s,'b'}, {"test",'c'}, {"krumld"s,'a'}, {"test1"s, 'd'}, {"test2"s, 'e'}, {"test3"s, 'f'}, {"test4"s, 'g'}, {"test5"s, 'h'}};
+//   ASSERT_TRUE(hash.get("krumld"s));
+//   ASSERT_TRUE(hash.get("xqzrbn"s));
+//   ASSERT_TRUE(hash.get("test"s));
+//   ASSERT_TRUE(hash.get("test1"s));
+//   ASSERT_TRUE(hash.get("test2"s));
+//   ASSERT_TRUE(hash.get("test3"s));
+//   ASSERT_TRUE(hash.get("test4"s));
+//   ASSERT_TRUE(hash.get("test5"s));
+//   auto a {*hash.get("krumld"s)};
+//   auto b {*hash.get("xqzrbn"s)};
+//   auto c {*hash.get("test"s)};
+//   auto d {*hash.get("test1"s)};
+//   auto e {*hash.get("test2"s)};
+//   auto f {*hash.get("test3"s)};
+//   auto g {*hash.get("test4"s)};
+//   auto h {*hash.get("test5"s)};
+//   EXPECT_EQ (a, 'a');
+//   EXPECT_EQ (b, 'b');
+//   EXPECT_EQ (c, 'c');
+//   EXPECT_EQ (d, 'd');
+//   EXPECT_EQ (e, 'e');
+//   EXPECT_EQ (f, 'f');
+//   EXPECT_EQ (g, 'g');
+//   EXPECT_EQ (h, 'h');
+// }
 
 
 TEST(EXISTS, Exists) {

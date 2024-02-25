@@ -52,7 +52,10 @@ SOFTWARE.
 #include <concepts>
 #include <type_traits>
 
-// uncomment to disable assert()
+
+/*std::unsigned_integral*/
+
+
 // #define NDEBUG
 
 /// @brief Version 0.0.1
@@ -61,11 +64,11 @@ SOFTWARE.
 /// General namespace for class
 namespace LibHashMap {
   
-  /// @brief  HashMap tolls namespace  
+  /// @brief  HashMap tools namespace  
   namespace Tools {
 
-    /// @brief struct Node to store data
-    template<typename KeyType, typename ValueType, std::unsigned_integral HashType, HashType table_size> struct Node {
+    /// @brief struct Node to store key, value and key counted hash
+    template<typename KeyType, typename ValueType,  std::unsigned_integral HashType, HashType table_size> struct Node {
       KeyType key;  ///  Original key value
       ValueType val;  ///  Value
       HashType hash;  ///  Hash, calculated for key
@@ -86,12 +89,14 @@ namespace LibHashMap {
       
       /// @brief Copy constructor
       /// @param node  Existing node
-      constexpr Node (Node& node) {
-        key = node.key;
-        val = node.val;
-        hash = node.hash;
-
+      constexpr Node (Node& node) : key{node.key}, val{node.val}, hash{node.hash} {
+        
         if (collisions_number) {
+          collision_chain.fill(0x0);
+          collisions_number = 0;
+        }
+
+        if (node.collisions_number) {
           std::ranges::copy_n(node.collision_chain.begin(), node.collisions_number, collision_chain.begin());
           collisions_number = node.collisions_number;
         }
@@ -99,12 +104,14 @@ namespace LibHashMap {
       
       /// @brief Const copy constructor
       /// @param node Existing node struct
-      constexpr Node (const Node& node) {
-        key = node.key;
-        val = node.val;
-        hash = node.hash;
+      constexpr Node (const Node& node) : key{node.key}, val{node.val}, hash{node.hash} {
 
         if (collisions_number) {
+          collision_chain.fill(0x0);
+          collisions_number = 0;
+        }
+
+        if (node.collisions_number) {
           std::ranges::copy_n(node.collision_chain.begin(), node.collisions_number, collision_chain.begin());
           collisions_number = node.collisions_number;
         }
@@ -112,12 +119,14 @@ namespace LibHashMap {
       
       /// @brief Move constructor
       /// @param node Existing node struct
-      constexpr Node (Node&& node) {
-        key = std::move(node.key);
-        val = std::move(node.val);
-        hash = std::move(node.hash);
-
+      constexpr Node (Node&& node)  : key{std::move(node.key)}, val{std::move(node.val)}, hash{std::move(node.hash)} {
+        
         if (collisions_number) {
+          collision_chain.fill(0x0);
+          collisions_number = 0;
+        }
+
+        if (node.collisions_number) {
           for (decltype (node.collisions_number) count{0}; count < node.collisions_number; ++count) {
             collision_chain[count] = std::move(node.collision_chain[count]);
           }
@@ -134,9 +143,15 @@ namespace LibHashMap {
         hash = node.hash;
 
         if (collisions_number) {
+          collision_chain.fill(0x0);
+          collisions_number = 0;
+        }
+
+        if (node.collisions_number) {
           std::ranges::copy_n(node.collision_chain.begin(), node.collisions_number, collision_chain.begin());
           collisions_number = node.collisions_number;
         }
+
         return this;
       }
       
@@ -149,9 +164,15 @@ namespace LibHashMap {
         hash = node.hash;
 
         if (collisions_number) {
+          collision_chain.fill(0x0);
+          collisions_number = 0;
+        }
+
+        if (node.collisions_number) {
           std::ranges::copy_n(node.collision_chain.begin(), node.collisions_number, collision_chain.begin());
           collisions_number = node.collisions_number;
         }
+
         return *this;
       }
 
@@ -164,25 +185,25 @@ namespace LibHashMap {
         hash = std::move(node.hash);
 
         if (collisions_number) {
+          collision_chain.fill(0x0);
+          collisions_number = 0;
+        }
+
+        if (node.collisions_number) {
           for (decltype (node.collisions_number) count{0}; count < node.collisions_number; ++count) {
             collision_chain[count] = std::move(node.collision_chain[count]);
           }
           collisions_number = std::move(node.collisions_number);
         }
+
         return *this;
       }
       
-      /// @brief Adding node with different key but with hash already exists
-      /// @param node Node struct pointer
-      /// @return True if node added to array and collision chan, else false
-      constexpr bool addCollision(const Node* const node) noexcept {
-        bool ret {false};
-        if (collisions_number < table_size) {
-          collision_chain[collisions_number] = node;
-          ++node;
-          ret = true;
-        }
-        return ret;
+      /// @brief Operator less for sorting object inside container
+      /// @param node comparing Node struct ref
+      /// @return True if previous node hash less then next one or false in another case
+      bool operator < (const Node& node) {
+        return hash < node.hash;
       }
     };
     
@@ -225,7 +246,7 @@ namespace LibHashMap {
       /// @brief Constructor to create HashMap class by initializer list
       /// @param lst initializer list
       constexpr explicit HashMap (const std::initializer_list<std::pair<Key, Value>>& lst)
-       : Tools::HashFunction<Key, Size>() {
+      : Tools::HashFunction<Key, Size>() {
         Size tmp_hash_sz{0}, stor_sz{0};
         std::array<Size, dim_size> tmp_hash_tbl;
         std::array<Key, dim_size> tmp_key_tbl;
@@ -245,29 +266,8 @@ namespace LibHashMap {
             if (std::ranges::find(tmp_key_tbl, val.first) == tmp_key_tbl.end()) {  //  Hash collision case
               Tools::Node<Key, Value, Size, dim_size> node{std::forward<Key>(val.first), std::forward<Value>(val.second), std::forward<Size>(hash)};
               data_stor[pivot_number] = std::move(node);
-              
-              auto collision_node {*(std::find_if(data_stor.begin(), data_stor.begin() + (pivot_number - 1), [&val](auto&& array_val) {
-                bool ret {false};
-                if constexpr (std::is_same<Value, std::string>::value || std::is_same<Value, std::string_view>::value) {
-                  if (!array_val.val.compare(val.second)) {
-                    ret = true;
-                  }
-                } else if constexpr (std::is_same<Value, const char*>::value) {
-                  std::string array_str{array_val.val};
-                  std::string val_str{val.second};
-                  if (!array_str.compare(val_str)) {
-                    ret = true;
-                  }
-                } else {  //  Integral type
-                  if (array_val.val == val.second) {
-                    ret = true;
-                  }
-              }
-              return ret;
-              }))};
-
-              (collision_node.collision_chain)[collision_node.collisions_number] = &data_stor[pivot_number];
-              ++(collision_node.collisions_number);
+              auto collision_node {std::ranges::find_if(data_stor.begin(), data_stor.begin() + (dim_size - (dim_size - pivot_number)), [&hash] (const auto& stor_node){return stor_node.hash == hash;})};
+              collision_node->collision_chain[collision_node->collisions_number++] = &data_stor[pivot_number];
               --pivot_number;
             } else {  //  Duplicated value
               static_assert(true, "Duplicated hash value");
@@ -278,13 +278,13 @@ namespace LibHashMap {
         static_assert(std::is_same<Size, decltype(dim_size)>::value, "Requested type should be equal dimension type size");
         
         std::ranges::for_each(lst, countHash);
-        std::ranges::sort(data_stor, [](auto& lhs, auto& rhs){return lhs.hash < rhs.hash;});
+        std::ranges::sort(data_stor.begin(), data_stor.begin() + (dim_size - (dim_size - pivot_number - 1)), [](auto& lhs, auto& rhs){return lhs.hash < rhs.hash;});
       }
       
       /// @brief Move constructor to create HashMap class by initializer list
       /// @param lst initializer list
       constexpr explicit HashMap (std::initializer_list<std::pair<Key, Value>>&& lst) 
-        : Tools::HashFunction<Key, Size>() {
+      : Tools::HashFunction<Key, Size>() {
         Size tmp_hash_sz{0}, stor_sz{0};
         std::array<Size, dim_size> tmp_hash_tbl;
         std::array<Key, dim_size> tmp_key_tbl;
@@ -304,29 +304,8 @@ namespace LibHashMap {
             if (std::ranges::find(tmp_key_tbl, val.first) == tmp_key_tbl.end()) {  //  Hash collision case
               Tools::Node<Key, Value, Size, dim_size> node{std::forward<Key>(val.first), std::forward<Value>(val.second), std::forward<Size>(hash)};
               data_stor[pivot_number] = std::move(node);
-              
-              auto collision_node {*(std::find_if(data_stor.begin(), data_stor.begin() + (pivot_number - 1), [&val](auto&& array_val) {
-                bool ret {false};
-                if constexpr (std::is_same<Value, std::string>::value || std::is_same<Value, std::string_view>::value) {
-                  if (!array_val.val.compare(val.second)) {
-                    ret = true;
-                  }
-                } else if constexpr (std::is_same<Value, const char*>::value) {
-                  std::string array_str{array_val.val};
-                  std::string val_str{val.second};
-                  if (!array_str.compare(val_str)) {
-                    ret = true;
-                  }
-                } else {  //  Integral type
-                  if (array_val.val == val.second) {
-                    ret = true;
-                  }
-              }
-              return ret;
-              }))};
-
-              (collision_node.collision_chain)[collision_node.collisions_number] = &data_stor[pivot_number];
-              ++(collision_node.collisions_number);
+              auto collision_node {std::ranges::find_if(data_stor.begin(), data_stor.begin() + (dim_size - (dim_size - pivot_number)), [&hash] (const auto& stor_node){return stor_node.hash == hash;})};
+              collision_node->collision_chain[collision_node->collisions_number++] = &data_stor[pivot_number];
               --pivot_number;
             } else {  //  Duplicated value
               static_assert(true, "Duplicated hash value");
@@ -337,7 +316,7 @@ namespace LibHashMap {
         static_assert(std::is_same<Size, decltype(dim_size)>::value, "Requested type should be equal dimension type size");
         
         std::ranges::for_each(lst, countHash);
-        std::ranges::sort(data_stor, [](auto& lhs, auto& rhs){return lhs.hash < rhs.hash;});
+        std::ranges::sort(data_stor.begin(), data_stor.begin() + (dim_size - (dim_size - pivot_number - 1)), [](auto& lhs, auto& rhs){return lhs.hash < rhs.hash;});
       }
 
       HashMap(HashMap&) = delete;
@@ -361,7 +340,7 @@ namespace LibHashMap {
           auto res {array_val->hash <=> key_hash};
 
           if (res == 0) {
-            if (!array_val->collisions_number) {
+            if (array_val->collisions_number) {
               if (array_val->key == key) {  //  There are collisions but first value is in main collision node
                 val = &(array_val->val);
               } else {
@@ -394,7 +373,7 @@ namespace LibHashMap {
               pos += pos/2; 
             }
           }
-        } while (pos >= 0 && pos < pivot_number); 
+        } while (pos >= 0 && pos <= pivot_number); 
         
         return val;
       }
@@ -414,6 +393,22 @@ namespace LibHashMap {
           auto res {array_val->hash <=> key_hash};
 
           if (res == 0) {
+            if (array_val->collisions_number) {
+              if (array_val->key == key) {  //  There are collisions but first value is in main collision node
+                ret = true;
+                break;
+              } else {
+                for (auto count : array_val->collision_chain) {  //  Looking value in collision chain
+                  if (key == count->key) {
+                    ret = true;
+                    break;
+                  }
+                }
+              }
+            } else {  //  There are no collisions at all
+              ret = true;
+              break;  
+            }
             ret = true;
             break;
           }
@@ -434,7 +429,7 @@ namespace LibHashMap {
               pos += pos/2; 
             }
           }
-        } while (pos >= 0 && pos < pivot_number); 
+        } while (pos >= 0 && pos <= pivot_number); 
         return ret;
       }
       
